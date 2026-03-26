@@ -16,6 +16,7 @@ find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 
 add_executable(control_bridge src/control_bridge.cpp)
+add_executable(localization src/localization.cpp)
 
 ament_target_dependencies(
   control_bridge
@@ -25,9 +26,25 @@ ament_target_dependencies(
   std_msgs
 )
 
+ament_target_dependencies(
+  localization
+  rclcpp
+  sensor_msgs
+  geometry_msgs
+  std_msgs
+  tf2
+  tf2_ros
+)
+
 install(
   TARGETS control_bridge
+  localization
   DESTINATION lib/${PROJECT_NAME}
+)
+
+install(
+  DIRECTORY launch
+  DESTINATION share/${PROJECT_NAME}
 )
 
 if(BUILD_TESTING)

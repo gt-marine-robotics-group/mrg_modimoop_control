@@ -10,4 +10,16 @@ def generate_launch_description():
             parameters=[{"rate_hz": 50.0}],
             output="screen",
         ),
+
+        Node(
+            package="mrg_modimoop_control",
+            executable="localization",
+            name="localization",
+            output="screen",
+            parameters=[{
+                'declination_rad': 0.0,
+                'use_tilt_compensation': True,
+                'publish_rate_hz': 20.0,
+            }]
+        )
     ])
