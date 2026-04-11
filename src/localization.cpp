@@ -6,10 +6,11 @@
 #include "sensor_msgs/msg/imu.hpp"
 #include "sensor_msgs/msg/magnetic_field.hpp"
 #include "sensor_msgs/msg/nav_sat_fix.hpp"
+#include "geometry_msgs/msg/vector3.hpp"
 #include "std_msgs/msg/float64.hpp"
 #include "tf2/LinearMath/Matrix3x3.h"
 #include "tf2/LinearMath/Quaternion.h"
-#include "std_msgs/msg/float64.hpp"
+#include "nav_msgs/msg/odometry.hpp"
 
 class LocalizationNode : public rclcpp::Node
 {
@@ -17,21 +18,15 @@ public:
   LocalizationNode() : Node("localization")
   {
     // Parameters
-    declination_rad_ = this->declare_parameter<double>("declination_rad", 0.0);
-    use_tilt_compensation_ = this->declare_parameter<bool>("use_tilt_compensation", true);
-    publish_rate_hz_ = this->declare_parameter<double>("publish_rate_hz", 20.0);
+    publish_rate_hz_ = this->declare_parameter<double>("publish_rate_hz", 30.0);
 
-    imu_sub_ = this->create_subscription<sensor_msgs::msg::Imu>(
-      "/modimoop/imu", 10,
-      std::bind(&LocalizationNode::imuCallback, this, std::placeholders::_1));
+    odometry_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
+      "/modimoop/localization/odometry/global", 10,
+      std::bind(&LocalizationNode::odometryCallback, this, std::placeholders::_1));
 
-    mag_sub_ = this->create_subscription<sensor_msgs::msg::MagneticField>(
-      "/modimoop/mag", 10,
-      std::bind(&LocalizationNode::magCallback, this, std::placeholders::_1));
-
-    navsat_sub_ = this->create_subscription<sensor_msgs::msg::NavSatFix>(
-      "/modimoop/navsat", 10,
-      std::bind(&LocalizationNode::navsatCallback, this, std::placeholders::_1));
+    anemometer_sub_ = this->create_subscription<geometry_msgs::msg::Vector3>(
+      "/modimoop/anemometer", 10,
+      std::bind(&LocalizationNode::anemometerCallback, this, std::placeholders::_1));
 
     heading_rad_pub_ =
       this->create_publisher<std_msgs::msg::Float64>("/modimoop/localization/heading_rad", 10);
@@ -39,8 +34,14 @@ public:
     heading_deg_pub_ =
       this->create_publisher<std_msgs::msg::Float64>("/modimoop/localization/heading_deg", 10);
 
-    navsat_pub_ =
-      this->create_publisher<sensor_msgs::msg::NavSatFix>("/modimoop/localization/navsat", 10);
+    global_loc_pub_ = 
+      this->create_publisher<geometry_msgs::msg::Vector3>("/modimoop/localization/global_pos", 10);
+
+    yaw_pub_ =
+      this->create_publisher<std_msgs::msg::Float64>("/modimoop/localization/yaw_rad", 10);
+
+    twa_pub_ =
+      this->create_publisher<std_msgs::msg::Float64>("/modimoop/localization/twa_rad", 10);
 
     // roll_pub_ =
     //    this->create_publisher<std_msgs::msg::Float64>("/modimoop/dbg/roll_rad", 10);
@@ -68,75 +69,136 @@ private:
     }
     return angle;
   }
-
-  void imuCallback(const sensor_msgs::msg::Imu::SharedPtr msg)
+  
+  void anemometerCallback(const geometry_msgs::msg::Vector3::SharedPtr msg)
   {
-    latest_imu_ = *msg;
+    latest_anemometer_ = *msg;
   }
 
-  void magCallback(const sensor_msgs::msg::MagneticField::SharedPtr msg)
+  void odometryCallback(const nav_msgs::msg::Odometry::SharedPtr msg) 
   {
-    latest_mag_ = *msg;
-  }
-
-  void navsatCallback(const sensor_msgs::msg::NavSatFix::SharedPtr msg)
-  {
-    latest_navsat_ = *msg;
+    latest_odometry_ = *msg;
   }
 
   bool computeHeading(double & heading_rad_out)
   {
-    if (!latest_mag_.has_value()) {
+    if (!latest_odometry_.has_value()) {
       return false;
     }
 
-    const auto & mag = latest_mag_.value();
+    // Orientation quaternion
+    double qx = latest_odometry_->pose.pose.orientation.x;
+    double qy = latest_odometry_->pose.pose.orientation.y;
+    double qz = latest_odometry_->pose.pose.orientation.z;
+    double qw = latest_odometry_->pose.pose.orientation.w;
 
-    double mx = mag.magnetic_field.x;
-    double my = mag.magnetic_field.y;
-    double mz = mag.magnetic_field.z;
+    double normalize_term = std::sqrt(qx*qx + qy*qy + qz*qz + qw*qw);
+    if (normalize_term < 1e-9) return false;
+    qx = qx / normalize_term;
+    qy = qy / normalize_term;
+    qz = qz / normalize_term;
+    qw = qw / normalize_term;
 
-    double heading = 0.0;
+    // Linear velocity
+    // double vx = latest_odometry_.twist.twist.linear.x;
+    // double vy = latest_odometry_.twist.twist.linear.y;
+    // double vz = latest_odometry_.twist.twist.linear.z;
 
-    if (use_tilt_compensation_ && latest_imu_.has_value()) {
-      const auto & imu = latest_imu_.value();
+    // Angular velocity
+    // double wx = latest_odometry_.twist.twist.angular.x;
+    // double wy = latest_odometry_.twist.twist.angular.y;
+    // double wz = latest_odometry_.twist.twist.angular.z;
 
-      // Extract roll, pitch, yaw from IMU orientation
-      tf2::Quaternion q(
-        imu.orientation.x,
-        imu.orientation.y,
-        imu.orientation.z,
-        imu.orientation.w);
+    // Covariances
+    // const auto &pose_cov = msg->pose.covariance;   // 36 elements
+    // const auto &twist_cov = msg->twist.covariance; // 36 elements
 
-      double roll, pitch, yaw;
-      tf2::Matrix3x3(q).getRPY(roll, pitch, yaw);
+    double siny_cosp = 2.0 * (qw * qz + qx * qy);
+    double cosy_cosp = 1.0 - 2.0 * (qy * qy + qz * qz);
+    double heading = std::atan2(siny_cosp, cosy_cosp);
+    double yaw = std::atan2(siny_cosp, cosy_cosp);
 
-      // Tilt compensation
-      double mx_comp = mx * std::cos(pitch) + mz * std::sin(pitch);
-      double my_comp =
-        mx * std::sin(roll) * std::sin(pitch) +
-        my * std::cos(roll) -
-        mz * std::sin(roll) * std::cos(pitch);
 
-      // need to use -y to get the orientation I want
-      // lower degrees in Quad 1; higher degrees towards Quad 4 in the x-y plane
-      heading = std::atan2(-my_comp, mx_comp);
-    } else {
-      // Flat assumption
-      heading = std::atan2(-my, mx);
-    }
+    // shift data into the correct frame
+    auto message = std_msgs::msg::Float64();
+    message.data = yaw - M_PI / 2;
+    yaw_pub_->publish(message);
 
-    heading += declination_rad_;
-    heading = wrapTo2Pi(heading);
+    heading = wrapTo2Pi(heading - M_PI / 2);
+
+    // auto message = std_msgs::msg::Float64();
+    // message.data = heading;
+    // heading_rad_pub_->publish(message);
+
+    // message.data = heading * (180 / M_PI);
+    // heading_deg_pub_->publish(message);
 
     heading_rad_out = heading;
+
+    return true;
+  }
+
+  bool computeTWA(double &twa_rad_out)
+  {
+    if (!latest_anemometer_.has_value() || !latest_odometry_.has_value()) return false;
+
+    double heading_rad = 0.0;
+    if (computeHeading(heading_rad) == false) return false;
+
+    double vx = latest_odometry_->twist.twist.linear.x;
+    double vy = latest_odometry_->twist.twist.linear.y;
+    // double vz = latest_odometry_->twist.twist.linear.z;
+    // double boat_speed = sqrt(vx*vx + vy*vy + vz*vz);
+
+    const auto &wind = latest_anemometer_.value();
+
+    double rel_wind_rad = std::atan2(-wind.y, wind.x);
+    rel_wind_rad = wrapTo2Pi(rel_wind_rad);
+    // double rel_wind_speed = sqrt(wind.y*wind.y + wind.x*wind.x);
+
+    //double twv = sqrt(rel_wind_speed*rel_wind_speed + boat_speed*boat_speed - 
+    //            2*boat_speed*rel_wind_speed*cos(rel_wind_rad));
+    
+    double Ax = wind.x;
+    double Ay = wind.y;
+
+    double Wx = Ax - vx;
+    double Wy = Ay - vy;
+
+    // double Wx_world = std::cos(heading_rad) * Wx - std::sin(heading_rad) * Wy;
+    // double Wy_world = std::sin(heading_rad) * Wx + std::cos(heading_rad) * Wy;
+
+    // not publishing right now; should be the true wind velocity/speed
+    // double twv = std::sqrt(Wx*Wx + Wy*Wy);
+
+    // The TWA is defined relative to the boat's heading; thus it is in the boat's frame
+    double twa = std::atan2(Wy, Wx);
+    twa = twa - M_PI;
+
+    //auto message = std_msgs::msg::Float64();
+    //message.data = twa;
+    //twa_pub_->publish(message);
+    twa = wrapTo2Pi(twa);
+    twa_rad_out = twa;
+
     return true;
   }
 
   void publishState()
   {
-    if (latest_navsat_.has_value()) {
-      navsat_pub_->publish(latest_navsat_.value());
+    if (latest_odometry_.has_value()) {
+      double x = latest_odometry_->pose.pose.position.x;
+      double y = latest_odometry_->pose.pose.position.y;
+      double z = latest_odometry_->pose.pose.position.z;
+      auto message = geometry_msgs::msg::Vector3();
+
+      message.x = -y;
+      message.y = x;
+      message.z = z;
+
+      // RCLCPP_INFO(this->get_logger(), "Hello, world! X-Value: %f", x);
+
+      global_loc_pub_->publish(message);      
     }
 
     double heading_rad = 0.0;
@@ -161,47 +223,39 @@ private:
       double roll, pitch, yaw;
       tf2::Matrix3x3(q).getRPY(roll, pitch, yaw);
 
-      std_msgs::msg::Float64 roll_msg;
-      roll_msg.data = roll;
-      roll_pub_->publish(roll_msg);
-
-      std_msgs::msg::Float64 pitch_msg;
-      pitch_msg.data = pitch;
-      pitch_pub_->publish(pitch_msg);
-
       std_msgs::msg::Float64 yaw_msg;
       yaw_msg.data = yaw;
       yaw_pub_->publish(yaw_msg);
     }*/
+    double twa_rad = 0.0;
+    if (computeTWA(twa_rad)) {
+      std_msgs::msg::Float64 twa_rad_msg;
+      twa_rad_msg.data = twa_rad;
+      twa_pub_->publish(twa_rad_msg);
+    }
   }
 
   // Parameters
-  double declination_rad_;
-  bool use_tilt_compensation_;
   double publish_rate_hz_;
 
   // Subscribers
-  rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_sub_;
-  rclcpp::Subscription<sensor_msgs::msg::MagneticField>::SharedPtr mag_sub_;
-  rclcpp::Subscription<sensor_msgs::msg::NavSatFix>::SharedPtr navsat_sub_;
+  rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odometry_sub_;
+  rclcpp::Subscription<geometry_msgs::msg::Vector3>::SharedPtr anemometer_sub_;
+
 
   // Publishers
   rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr heading_rad_pub_;
   rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr heading_deg_pub_;
-  rclcpp::Publisher<sensor_msgs::msg::NavSatFix>::SharedPtr navsat_pub_;
-
-  // Debug Publishers
-  // rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr roll_pub_;
-  // rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr pitch_pub_;
-  // rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr yaw_pub_;
+  rclcpp::Publisher<geometry_msgs::msg::Vector3>::SharedPtr global_loc_pub_;
+  rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr twa_pub_;
+  rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr yaw_pub_;
 
   // Timer
   rclcpp::TimerBase::SharedPtr timer_;
 
-  // Latest sensor values
-  std::optional<sensor_msgs::msg::Imu> latest_imu_;
-  std::optional<sensor_msgs::msg::MagneticField> latest_mag_;
-  std::optional<sensor_msgs::msg::NavSatFix> latest_navsat_;
+  // Latest odometry and anemometer
+  std::optional<nav_msgs::msg::Odometry> latest_odometry_;
+  std::optional<geometry_msgs::msg::Vector3> latest_anemometer_;
 };
 
 int main(int argc, char ** argv)

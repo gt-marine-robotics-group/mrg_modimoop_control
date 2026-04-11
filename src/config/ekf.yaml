@@ -1,0 +1,80 @@
+ekf_local:
+  ros__parameters:
+    frequency: 30.0
+    sensor_timeout: 0.2
+    two_d_mode: true
+    publish_tf: true
+    print_diagnostics: true
+
+    map_frame: map
+    odom_frame: odom
+    base_link_frame: hull
+    world_frame: odom
+    use_sim_time: true
+
+    imu0: /modimoop/imu
+    imu0_queue_size: 10
+    imu0_nodelay: false
+    imu0_differential: false
+    imu0_relative: false
+    yaw_offset: 1.5707963268
+
+    imu0_config: [false, false, false,
+                  false, false, true,
+                  false, false, false,
+                  false, false, true,
+                  false, false, false]
+
+navsat_transform:
+  ros__parameters:
+    frequency: 30.0
+    delay: 0.0
+    magnetic_declination_radians: 0.0   
+    zero_altitude: true
+    publish_filtered_gps: true
+    broadcast_utm_transform: false
+    use_odometry_yaw: true
+    wait_for_datum: false
+    use_sim_time: true
+    print_diagnostics: false
+    yaw_offset: 1.5707963268
+
+ekf_global:
+  ros__parameters:
+    frequency: 30.0
+    sensor_timeout: 0.2
+    two_d_mode: true
+    publish_tf: true
+    print_diagnostics: false
+    use_sim_time: true
+
+    map_frame: map
+    odom_frame: odom
+    base_link_frame: hull
+    world_frame: map
+
+    odom0: /modimoop/localization/odometry/gps
+    odom0_queue_size: 10
+    odom0_nodelay: false
+    odom0_differential: false
+    odom0_relative: false
+
+    odom0_config: [true,  true,  false,
+                   false, false, false,
+                   false, false, false,
+                   false, false, false,
+                   false, false, false]
+
+    imu0: /modimoop/imu
+    imu0_queue_size: 10
+    imu0_nodelay: false
+    imu0_differential: false
+    imu0_relative: false
+    yaw_offset: 1.5707963268
+    imu0_remove_gravitational_acceleration: true
+
+    imu0_config: [false, false, false,
+                  false, false, true,
+                  false, false, false,
+                  false, false, true,
+                  true, true, false]
