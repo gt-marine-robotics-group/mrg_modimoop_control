@@ -27,7 +27,7 @@ ekf_local:
 
 navsat_transform:
   ros__parameters:
-    frequency: 30.0
+    frequency: 10.0
     delay: 0.0
     magnetic_declination_radians: 0.0   
     zero_altitude: true

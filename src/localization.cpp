@@ -126,13 +126,6 @@ private:
 
     heading = wrapTo2Pi(heading - M_PI / 2);
 
-    // auto message = std_msgs::msg::Float64();
-    // message.data = heading;
-    // heading_rad_pub_->publish(message);
-
-    // message.data = heading * (180 / M_PI);
-    // heading_deg_pub_->publish(message);
-
     heading_rad_out = heading;
 
     return true;

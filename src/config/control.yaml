@@ -1,0 +1,33 @@
+control_bridge:
+  ros__parameters:
+    sail_table_csv: ""
+
+    boat.m: 10.0
+    boat.Iz: 25.0
+    boat.rho_w: 1025.0
+    boat.rho_a: 1.225
+    boat.S_r: 0.02322576
+    boat.l_r: 0.5
+    boat.Sf: 0.63
+    boat.CDx: 0.0005853658536585366
+    boat.Yv_coeff: 40.0
+    boat.C_b: 89.02620375
+    boat.Nv_coeff: 0.0
+    boat.Va: 4.0
+    boat.betaA: 1.5707963267948966
+    boat.x_ce_m: 0.13
+    boat.y_ce_m: 0.0
+    boat.x_ce_t: 0.78
+    boat.y_ce_t: 0.0
+    boat.CLalpha_r: 5.0
+
+    controller.x_trim: [2.5, 0.03200131, 0.0]
+    controller.u_trim: [-0.00031875, 0.15786053]
+
+    # Row-major 2x3:
+    # [K00, K01, K02, K10, K11, K12]
+    controller.K:
+      [
+        0.54565928, 5.17673327, 10.41498649,
+        1.24463216, 0.21089667, -0.94761705
+      ]

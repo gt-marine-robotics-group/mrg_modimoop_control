@@ -5,10 +5,22 @@ from launch.substitutions import PathJoinSubstitution
 
 def generate_launch_description():
 
+    sail_table_csv = PathJoinSubstitution([
+        FindPackageShare("mrg_modimoop_control"),
+        "params",
+        "vlm_tables.csv",
+    ])
+
     ekf_yaml = PathJoinSubstitution([
         FindPackageShare("mrg_modimoop_control"),
         "config",
         "ekf.yaml",
+    ])
+
+    control_yaml = PathJoinSubstitution([
+        FindPackageShare("mrg_modimoop_control"),
+        "config",
+        "control.yaml",
     ])
 
     return LaunchDescription([
@@ -16,7 +28,11 @@ def generate_launch_description():
             package="mrg_modimoop_control",
             executable="control_bridge",
             name="control_bridge",
-            parameters=[{"rate_hz": 50.0}],
+            parameters=[control_yaml,
+                        {
+                            "sail_table_csv": sail_table_csv,
+                        }
+                    ],
             output="screen",
         ),
 
@@ -38,7 +54,7 @@ def generate_launch_description():
             name="planner",
             output="screen",
             parameters=[{
-                'g_goal': 1.0,
+                'g_goal': 10.0,
                 'g_up': 5.0,
                 'g_down': 5.0,
                 'g_hyst': 2.0,

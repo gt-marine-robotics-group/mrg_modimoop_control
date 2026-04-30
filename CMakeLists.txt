@@ -193,6 +193,11 @@ install(
   DESTINATION share/${PROJECT_NAME}/config
 )
 
+install(
+  DIRECTORY src/params/
+  DESTINATION share/${PROJECT_NAME}/params
+)
+
 #
 # Testing / lint
 #

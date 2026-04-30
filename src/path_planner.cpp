@@ -10,23 +10,7 @@ namespace
 {
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kTwoPi = 2.0 * kPi;
-constexpr double kEarthRadiusM = 6371000.0;
 }  // namespace
-
-Point2D PathPlanner::geo_to_local_en(
-  const GeoPoint & origin,
-  const GeoPoint & target)
-{
-  const double lat0 = origin.latitude_deg * kPi / 180.0;
-  const double lat1 = target.latitude_deg * kPi / 180.0;
-  const double dlat = lat1 - lat0;
-  const double dlon = (target.longitude_deg - origin.longitude_deg) * kPi / 180.0;
-
-  Point2D p;
-  p.x_east_m = kEarthRadiusM * dlon * std::cos(0.5 * (lat0 + lat1));
-  p.y_north_m = kEarthRadiusM * dlat;
-  return p;
-}
 
 PathPlanner::PathPlanner(const PlannerParams & params)
 : params_(params)
@@ -71,44 +55,22 @@ double PathPlanner::angle_diff_signed(double a, double b)
 }
 
 double PathPlanner::approx_goal_bearing_rad(
-  const GeoPoint & from,
-  const GeoPoint & to)
+  const Vector3D & from,
+  const Vector3D & to)
 {
-  // Simple local tangent-plane approximation; good enough for nearby waypoints.
-  const double lat1 = from.latitude_deg * kPi / 180.0;
-  const double lat2 = to.latitude_deg * kPi / 180.0;
-  const double dlat = lat2 - lat1;
-  const double dlon = (to.longitude_deg - from.longitude_deg) * kPi / 180.0;
+  const double dx = to.x - from.x;
+  const double dy = to.y - from.y;
 
-  const double x = dlon * std::cos(0.5 * (lat1 + lat2));
-  const double y = dlat;
-
-  return wrap_to_2pi(std::atan2(y, x));
-}
-
-double PathPlanner::approx_distance_m(
-  const GeoPoint & a,
-  const GeoPoint & b)
-{
-  const double lat1 = a.latitude_deg * kPi / 180.0;
-  const double lat2 = b.latitude_deg * kPi / 180.0;
-  const double dlat = lat2 - lat1;
-  const double dlon = (b.longitude_deg - a.longitude_deg) * kPi / 180.0;
-
-  const double x = dlon * std::cos(0.5 * (lat1 + lat2));
-  const double y = dlat;
-  return kEarthRadiusM * std::sqrt(x * x + y * y);
+  return wrap_to_2pi(std::atan2(dy, dx));
 }
 
 double PathPlanner::goal_potential(
   const PlannerInput & input,
   double candidate_heading_rad) const
 {
-  // Approximate Pw on the local ring and encourage headings aligned with goal bearing.
   const double goal_bearing = approx_goal_bearing_rad(input.current_position, input.goal_position);
   const double heading_error = std::abs(angle_diff_signed(candidate_heading_rad, goal_bearing));
 
-  // Simple surrogate for UG: lower when aligned toward goal.
   return params_.g_goal * params_.window_size_m * heading_error;
 }
 
@@ -167,10 +129,13 @@ double PathPlanner::total_potential(
   const PlannerInput & input,
   double candidate_heading_rad) const
 {
+  // twa is relative to the robot's frame, not world frame
+  const double wind_world_rad = wrap_to_2pi(input.heading_rad + input.twa_rad);
+
   return goal_potential(input, candidate_heading_rad) +
-         upwind_potential(candidate_heading_rad, input.twa_rad) +
-         downwind_potential(candidate_heading_rad, input.twa_rad) +
-         hysteresis_potential(candidate_heading_rad, input.heading_rad, input.twa_rad);
+         upwind_potential(candidate_heading_rad, wind_world_rad) +
+         downwind_potential(candidate_heading_rad, wind_world_rad) +
+         hysteresis_potential(candidate_heading_rad, input.heading_rad, wind_world_rad);
 }
 
 double PathPlanner::compute_target_heading(const PlannerInput & input) const
@@ -189,6 +154,26 @@ double PathPlanner::compute_target_heading(const PlannerInput & input) const
   }
 
   return wrap_to_2pi(best_heading);
+}
+
+PlannerDebugInfo PathPlanner::compute_debug_info(const PlannerInput & input) const
+{
+  PlannerDebugInfo info;
+
+  info.target_heading_rad = compute_target_heading(input);
+  info.heading_rad = input.heading_rad;
+  info.twa_relative_rad = input.twa_rad;
+  info.wind_world_rad = wrap_to_2pi(input.heading_rad + input.twa_rad);
+  info.goal_potential = goal_potential(input, info.target_heading_rad);
+  info.upwind_potential = goal_potential(input, info.target_heading_rad);
+  info.downwind_potential = downwind_potential(info.target_heading_rad, info.wind_world_rad);
+  info.hysteresis_potential = hysteresis_potential(
+    info.target_heading_rad,
+    input.heading_rad,
+    info.wind_world_rad);
+  info.total_potential = info.goal_potential + info.upwind_potential + info.downwind_potential + info.hysteresis_potential;
+
+  return info;
 }
 
 }  // namespace mrg_modimoop_planner
