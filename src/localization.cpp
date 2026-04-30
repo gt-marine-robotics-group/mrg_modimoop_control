@@ -121,10 +121,10 @@ private:
 
     // shift data into the correct frame
     auto message = std_msgs::msg::Float64();
-    message.data = yaw - M_PI / 2;
+    message.data = yaw;
     yaw_pub_->publish(message);
 
-    heading = wrapTo2Pi(heading - M_PI / 2);
+    heading = wrapTo2Pi(heading);
 
     heading_rad_out = heading;
 
@@ -166,7 +166,6 @@ private:
 
     // The TWA is defined relative to the boat's heading; thus it is in the boat's frame
     double twa = std::atan2(Wy, Wx);
-    twa = twa - M_PI;
 
     //auto message = std_msgs::msg::Float64();
     //message.data = twa;
@@ -185,11 +184,9 @@ private:
       double z = latest_odometry_->pose.pose.position.z;
       auto message = geometry_msgs::msg::Vector3();
 
-      message.x = -y;
-      message.y = x;
+      message.x = x;
+      message.y = y;
       message.z = z;
-
-      // RCLCPP_INFO(this->get_logger(), "Hello, world! X-Value: %f", x);
 
       global_loc_pub_->publish(message);      
     }
