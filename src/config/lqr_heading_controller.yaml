@@ -1,0 +1,58 @@
+lqr_heading_controller:
+  ros__parameters:
+    odom_topic: "/modimoop/localization/odometry/global"
+    heading_topic: "/modimoop/localization/heading_rad"
+    target_heading_topic: "/modimoop/planner/heading_targ"
+
+    # For the first scheduled version, this topic is treated as the body-frame wind vector used
+    # to choose a schedule row. If this is true wind instead of apparent wind, this is still a
+    # simple first approximation; later we can compute apparent wind explicitly.
+    wind_body_topic: "/modimoop/localization/tw_vec3"
+
+    # Separate scalar actuator command topics. Commands are radians.
+    rudder_command_topic: "/modimoop/cmd/rudder_pos"
+    backwing_command_topic: "/modimoop/cmd/backwing_pos"
+    debug_topic: "/modimoop/control/lqr_heading/debug"
+
+    control_rate_hz: 50.0
+    sensor_timeout_s: 0.35
+    target_timeout_s: 2.0
+    wind_timeout_s: 1.0
+
+    heading_kp: 0.5
+    heading_kd: 0.40
+    r_cmd_max_rad_s: 0.1745329252   # 10 deg/s
+
+    delta_r_max_rad: 0.785398      # rudder +/-45 deg
+    delta_w_max_rad: 0.349066      # backwing +/-12 deg = 0.2094395102  +/15 deg = 0.349066
+
+    # Flip these to -1.0 if Gazebo joint command sign is opposite the controller sign convention.
+    rudder_sign: -1.0
+    backwing_sign: 1.0
+
+    publish_safe_on_stale: true
+    safe_rudder_rad: 0.0
+    safe_backwing_rad: 0.0
+
+    # Nearest-neighbor gain schedule. Generate this CSV with:
+    # python3 generate_offline_lqr_tables.py --out-dir offline_tables \
+    #   --wind-speeds 3.5,4.5,5,5.5,6,6.5,7,7.5,8,8.5,9,9.5,10,10.5 \
+    #   --wind-angles-deg=-150,-140,-130,-120,-110,-100,-90,-80,-70,-60,-50,-40,-30,-20,-15,15,20,30,40,50,60,70,80,90,100,110,120,130,140,150  \
+    #   --trim-speeds 1.0
+    use_gain_schedule: true
+    schedule_csv_path: ""              # Set this to /absolute/path/to/offline_tables/control_schedule.csv
+    schedule_trim_speed: 1.0
+    schedule_trim_tolerance: 1.0e-6
+    require_wind_for_schedule: true
+    require_schedule_load: true
+
+    # These scales tune nearest-neighbor distance, not controller gains.
+    schedule_speed_scale_mps: 1.0
+    schedule_angle_scale_rad: 0.5235987756   # 30 deg
+
+    # Fallback fixed controller used if use_gain_schedule=false or the CSV fails to load.
+    # Replace these with a valid trim_speed=3.0 row from your generated CSV if running fixed mode.
+    x_trim: [3.0, 0.0, 0.0]
+    u_trim: [0.0, 0.0]
+    K_row_major: [0.54565928, 5.17673327, 10.41498649,
+                  1.24463216, 0.21089667, -0.94761705]

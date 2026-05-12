@@ -2,14 +2,10 @@ from launch import LaunchDescription
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 from launch.substitutions import PathJoinSubstitution
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
 
 def generate_launch_description():
-
-    sail_table_csv = PathJoinSubstitution([
-        FindPackageShare("mrg_modimoop_control"),
-        "params",
-        "vlm_tables.csv",
-    ])
 
     ekf_yaml = PathJoinSubstitution([
         FindPackageShare("mrg_modimoop_control"),
@@ -17,23 +13,35 @@ def generate_launch_description():
         "ekf.yaml",
     ])
 
-    control_yaml = PathJoinSubstitution([
+    lqr_control_yaml = PathJoinSubstitution([
         FindPackageShare("mrg_modimoop_control"),
         "config",
-        "control.yaml",
+        "lqr_heading_controller.yaml",
     ])
 
+    default_schedule_csv_path = PathJoinSubstitution([
+        FindPackageShare("mrg_modimoop_control"),
+        "params",
+        "control_schedule.csv",
+    ])
+
+    schedule_csv_arg = DeclareLaunchArgument(
+        "schedule_csv_path",
+        default_value=default_schedule_csv_path,
+        description="Path to offline LQR control schedule CSV",
+    )
+
     return LaunchDescription([
+
+        schedule_csv_arg,
+
         Node(
             package="mrg_modimoop_control",
-            executable="control_bridge",
-            name="control_bridge",
-            parameters=[control_yaml,
-                        {
-                            "sail_table_csv": sail_table_csv,
-                        }
-                    ],
+            executable="lqr_heading_controller",
+            name="lqr_heading_controller",
             output="screen",
+            parameters=[lqr_control_yaml,
+                        {"schedule_csv_path": LaunchConfiguration("schedule_csv_path")}],
         ),
 
         Node(
@@ -64,36 +72,7 @@ def generate_launch_description():
             }]
         ),
 
-        #Node(
-        #    package="mrg_modimoop_control",
-        #    executable="temp_goal_publisher",
-        #    name="temp_goal_publisher",
-        #    output="screen",
-        #    parameters=[{
-        #        'publish_rate_hz': 2.0,
-        #        'east_offset_m': -1000.0,
-        #        'north_offset_m': 0.0,
-        #    }]
-        #),
-
-        # We have to fuse IMU and Magnetometer data into one; this is a bit of a workaround
-        Node(
-            package='imu_filter_madgwick',
-            executable='imu_filter_madgwick_node',
-            name='imu_filter',
-            output='screen',
-            parameters=[{
-                'use_magnetic_field_msg': True,
-                'world_frame': 'enu',
-                'publish_tf': False,
-                'use_sim_time': True,
-            }],
-            remappings=[
-                ('/imu/data_raw', '/modimoop/imu_raw'),
-                ('/imu/mag', '/modimoop/mag'),
-                ('/imu/data', '/modimoop/imu'),
-            ]
-        ),
+        
 
         Node(
             package="robot_localization",

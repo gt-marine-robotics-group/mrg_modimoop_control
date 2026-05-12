@@ -20,7 +20,7 @@ public:
   : Node("planner"),
     planner_(load_params())
   {
-    goal_pos_ = Vector3D{100.0, -100.0, 0.0}; // temporary goal location
+    goal_pos_ = Vector3D{50.0, 50.0, 0.0}; // temporary goal location
 
     heading_sub_ = create_subscription<std_msgs::msg::Float64>(
       "/modimoop/localization/heading_rad",
@@ -130,9 +130,12 @@ private:
 
     std_msgs::msg::Float64 out;
     out.data = target_heading;
+
+    // temporary for controls testing
+    out.data = 2*3.14159 - 3.14159/4;
     heading_target_pub_->publish(out);
 
-    RCLCPP_INFO_THROTTLE(
+    /*RCLCPP_INFO_THROTTLE(
       get_logger(),
       *get_clock(),
       1000,
@@ -159,7 +162,7 @@ private:
       1000,
       "Published heading=%.3f rad",
       target_heading
-    );
+    );*/
   }
 
   PathPlanner planner_;

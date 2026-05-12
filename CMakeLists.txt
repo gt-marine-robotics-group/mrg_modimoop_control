@@ -19,34 +19,6 @@ find_package(tf2_ros REQUIRED)
 # Libraries
 #
 
-add_library(sail_model_lib
-  src/sail_model.cpp
-)
-
-target_include_directories(sail_model_lib
-  PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:include>
-)
-
-target_compile_features(sail_model_lib PUBLIC cxx_std_17)
-
-add_library(boat_dynamics_lib
-  src/boat_dynamics.cpp
-)
-
-target_include_directories(boat_dynamics_lib
-  PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:include>
-)
-
-target_link_libraries(boat_dynamics_lib
-  sail_model_lib
-)
-
-target_compile_features(boat_dynamics_lib PUBLIC cxx_std_17)
-
 # New pure planning library
 add_library(path_planner_lib
   src/path_planner.cpp
@@ -63,32 +35,6 @@ target_compile_features(path_planner_lib PUBLIC cxx_std_17)
 #
 # Executables
 #
-
-add_executable(control_bridge
-  src/control_bridge.cpp
-)
-
-target_include_directories(control_bridge
-  PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:include>
-)
-
-ament_target_dependencies(
-  control_bridge
-  rclcpp
-  sensor_msgs
-  geometry_msgs
-  nav_msgs
-  std_msgs
-)
-
-target_link_libraries(control_bridge
-  sail_model_lib
-  boat_dynamics_lib
-)
-
-target_compile_features(control_bridge PUBLIC cxx_std_17)
 
 add_executable(localization
   src/localization.cpp
@@ -139,25 +85,15 @@ target_link_libraries(planner
 
 target_compile_features(planner PUBLIC cxx_std_17)
 
-# temp goal
-add_executable(temp_goal_publisher
-  src/temp_goal_publisher.cpp
-)
-
-target_include_directories(temp_goal_publisher
-  PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:include>
-)
+add_executable(lqr_heading_controller src/lqr_heading_controller.cpp)
 
 ament_target_dependencies(
-  temp_goal_publisher
+  lqr_heading_controller
   rclcpp
-  sensor_msgs
+  std_msgs
+  geometry_msgs
   nav_msgs
 )
-
-target_compile_features(temp_goal_publisher PUBLIC cxx_std_17)
 
 #
 # Install
@@ -165,13 +101,10 @@ target_compile_features(temp_goal_publisher PUBLIC cxx_std_17)
 
 install(
   TARGETS
-    sail_model_lib
-    boat_dynamics_lib
+    lqr_heading_controller
     path_planner_lib
-    control_bridge
     localization
     planner
-    temp_goal_publisher
   EXPORT export_${PROJECT_NAME}
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib

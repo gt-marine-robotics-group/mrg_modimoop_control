@@ -2,6 +2,7 @@
 #include <memory>
 #include <optional>
 
+#include "localization.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/imu.hpp"
 #include "sensor_msgs/msg/magnetic_field.hpp"
@@ -11,6 +12,8 @@
 #include "tf2/LinearMath/Matrix3x3.h"
 #include "tf2/LinearMath/Quaternion.h"
 #include "nav_msgs/msg/odometry.hpp"
+
+using mrg_modimoop_localization::wrapTo2Pi;
 
 class LocalizationNode : public rclcpp::Node
 {
@@ -43,6 +46,9 @@ public:
     twa_pub_ =
       this->create_publisher<std_msgs::msg::Float64>("/modimoop/localization/twa_rad", 10);
 
+    tw_pub_ =
+      this->create_publisher<geometry_msgs::msg::Vector3>("/modimoop/localization/tw_vec3", 10);
+
     // roll_pub_ =
     //    this->create_publisher<std_msgs::msg::Float64>("/modimoop/dbg/roll_rad", 10);
 
@@ -61,15 +67,7 @@ public:
   }
 
 private:
-  static double wrapTo2Pi(double angle)
-  {
-    angle = std::fmod(angle, 2.0 * M_PI);
-    if (angle < 0.0) {
-      angle += 2.0 * M_PI;
-    }
-    return angle;
-  }
-  
+    
   void anemometerCallback(const geometry_msgs::msg::Vector3::SharedPtr msg)
   {
     latest_anemometer_ = *msg;
@@ -131,7 +129,7 @@ private:
     return true;
   }
 
-  bool computeTWA(double &twa_rad_out)
+  bool computeTW(double &twa_rad_out, geometry_msgs::msg::Vector3 &true_wind_out)
   {
     if (!latest_anemometer_.has_value() || !latest_odometry_.has_value()) return false;
 
@@ -140,38 +138,28 @@ private:
 
     double vx = latest_odometry_->twist.twist.linear.x;
     double vy = latest_odometry_->twist.twist.linear.y;
-    // double vz = latest_odometry_->twist.twist.linear.z;
-    // double boat_speed = sqrt(vx*vx + vy*vy + vz*vz);
 
     const auto &wind = latest_anemometer_.value();
 
     double rel_wind_rad = std::atan2(-wind.y, wind.x);
     rel_wind_rad = wrapTo2Pi(rel_wind_rad);
-    // double rel_wind_speed = sqrt(wind.y*wind.y + wind.x*wind.x);
-
-    //double twv = sqrt(rel_wind_speed*rel_wind_speed + boat_speed*boat_speed - 
-    //            2*boat_speed*rel_wind_speed*cos(rel_wind_rad));
     
     double Ax = wind.x;
     double Ay = wind.y;
 
+    // true wind = apparent wind - boat velocity
     double Wx = Ax - vx;
     double Wy = Ay - vy;
-
-    // double Wx_world = std::cos(heading_rad) * Wx - std::sin(heading_rad) * Wy;
-    // double Wy_world = std::sin(heading_rad) * Wx + std::cos(heading_rad) * Wy;
-
-    // not publishing right now; should be the true wind velocity/speed
-    // double twv = std::sqrt(Wx*Wx + Wy*Wy);
 
     // The TWA is defined relative to the boat's heading; thus it is in the boat's frame
     double twa = std::atan2(Wy, Wx);
 
-    //auto message = std_msgs::msg::Float64();
-    //message.data = twa;
-    //twa_pub_->publish(message);
     twa = wrapTo2Pi(twa);
     twa_rad_out = twa;
+
+    true_wind_out.x = Wx;
+    true_wind_out.y = Wy;
+    true_wind_out.z = 0.0;
 
     return true;
   }
@@ -218,10 +206,12 @@ private:
       yaw_pub_->publish(yaw_msg);
     }*/
     double twa_rad = 0.0;
-    if (computeTWA(twa_rad)) {
+    geometry_msgs::msg::Vector3 true_wind_out;
+    if (computeTW(twa_rad, true_wind_out)) {
       std_msgs::msg::Float64 twa_rad_msg;
       twa_rad_msg.data = twa_rad;
       twa_pub_->publish(twa_rad_msg);
+      tw_pub_->publish(true_wind_out);
     }
   }
 
@@ -238,6 +228,7 @@ private:
   rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr heading_deg_pub_;
   rclcpp::Publisher<geometry_msgs::msg::Vector3>::SharedPtr global_loc_pub_;
   rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr twa_pub_;
+  rclcpp::Publisher<geometry_msgs::msg::Vector3>::SharedPtr tw_pub_;
   rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr yaw_pub_;
 
   // Timer
